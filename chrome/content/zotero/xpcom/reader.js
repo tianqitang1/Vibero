@@ -36,6 +36,166 @@ const ZipReader = Components.Constructor(
 var { InlineSpellChecker } = ChromeUtils.importESModule("resource://gre/modules/InlineSpellChecker.sys.mjs");
 
 // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors/Invalid_array_length
+
+async function _zoteroOSSCallDeepWikiAPI(requestBodyJSON) {
+	try {
+		const requestBody = typeof requestBodyJSON === 'string' ? JSON.parse(requestBodyJSON) : requestBodyJSON;
+		const DEEPWIKI_API_URL = 'https://api.deepwiki.com/chat/completions';
+		const response = await fetch(DEEPWIKI_API_URL, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(requestBody)
+		});
+		if (!response.ok) {
+			const errorText = await response.text();
+			throw new Error(`DeepWiki API error (${response.status}): ${errorText}`);
+		}
+		if (requestBody.stream) {
+			const reader = response.body.getReader();
+			const decoder = new TextDecoder();
+			const chunks = [];
+			let buffer = '';
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				buffer += decoder.decode(value, { stream: true });
+				const lines = buffer.split('\n');
+				buffer = lines.pop() || '';
+				for (const line of lines) {
+					const trimmedLine = line.trim();
+					if (trimmedLine && trimmedLine.startsWith('data: ')) {
+						const data = trimmedLine.slice(6);
+						if (data !== '[DONE]') {
+							chunks.push(data);
+						}
+					}
+				}
+			}
+			return { stream: true, chunks };
+		}
+		const data = await response.json();
+		return { stream: false, data };
+	}
+	catch (e) {
+		Zotero.logError(e);
+		throw e;
+	}
+}
+
+function _zoteroNormalizeOpenAIChatURL(base) {
+	let u = String(base || '').trim().replace(/\/+$/, '');
+	if (!u) {
+		return '';
+	}
+	if (/chat\/completions$/i.test(u)) {
+		return u;
+	}
+	if (/\/v1$/i.test(u)) {
+		return u + '/chat/completions';
+	}
+	return u + '/v1/chat/completions';
+}
+
+async function _zoteroReaderRequestPaperSummary(readerInstance) {
+	try {
+		await readerInstance._initPromise;
+		let internal = readerInstance._internalReader;
+		if (!internal || typeof internal.getPlainTextForAIChat !== 'function') {
+			return JSON.stringify({
+				ok: false,
+				message: 'reader_not_ready',
+			});
+		}
+		let maxChars = Zotero.Prefs.get('reader.paperSummary.maxChars');
+		if (maxChars === undefined || maxChars === null || maxChars === '') {
+			maxChars = 120000;
+		}
+		maxChars = Number(maxChars) || 120000;
+		let plain = await internal.getPlainTextForAIChat(maxChars);
+		if (!plain || !String(plain).trim()) {
+			return JSON.stringify({
+				ok: false,
+				message: 'no_extracted_text',
+			});
+		}
+		let apiURLRaw = Zotero.Prefs.get('reader.paperSummary.apiURL');
+		if (!apiURLRaw || !String(apiURLRaw).trim()) {
+			return JSON.stringify({
+				ok: false,
+				message: '请在阅读器侧栏「全文摘要」中填写 API Base URL（如 https://api.openai.com/v1）与 API Key，并保存。',
+			});
+		}
+		let url = _zoteroNormalizeOpenAIChatURL(apiURLRaw);
+		let model = Zotero.Prefs.get('reader.paperSummary.model') || 'gpt-4o-mini';
+		let apiKey = Zotero.Prefs.get('reader.paperSummary.apiKey') || '';
+		let systemPrompt = '你是学术阅读助手。请根据用户给出的论文全文摘录，用中文写一段结构清晰的简明摘要（研究背景/问题、方法、主要结论）。不要编造文中没有的内容。若文本仅为片段，请在摘要开头简要说明。';
+		let userContent = '以下是 PDF 文字层提取的内容（可能不完整、含 OCR 噪声）：\n\n' + plain;
+		let headers = { 'Content-Type': 'application/json' };
+		if (apiKey) {
+			headers.Authorization = 'Bearer ' + apiKey;
+		}
+		let body = {
+			model,
+			temperature: 0.3,
+			max_tokens: 4096,
+			messages: [
+				{ role: 'system', content: systemPrompt },
+				{ role: 'user', content: userContent },
+			],
+		};
+		let response = await fetch(url, {
+			method: 'POST',
+			headers,
+			body: JSON.stringify(body),
+		});
+		let rawText = await response.text();
+		if (!response.ok) {
+			let snippet = rawText.length > 500 ? rawText.slice(0, 500) + '…' : rawText;
+			return JSON.stringify({
+				ok: false,
+				message: `HTTP ${response.status}: ${snippet}`,
+			});
+		}
+		let data;
+		try {
+			data = JSON.parse(rawText);
+		}
+		catch (_e) {
+			return JSON.stringify({
+				ok: false,
+				message: 'invalid_json_response',
+			});
+		}
+		let content = data.choices && data.choices[0] && data.choices[0].message
+			? data.choices[0].message.content
+			: null;
+		if (content == null || content === '') {
+			return JSON.stringify({
+				ok: false,
+				message: 'empty_model_output',
+			});
+		}
+		let outText = String(content);
+		try {
+			let aid = readerInstance._item?.id;
+			if (aid && Zotero.PaperAiDB?.saveFullSummary) {
+				await Zotero.PaperAiDB.saveFullSummary(aid, outText);
+			}
+		}
+		catch (_saveE) {
+			Zotero.debug('[paperSummary] saveFullSummary failed');
+		}
+		return JSON.stringify({ ok: true, text: outText });
+	}
+	catch (e) {
+		Zotero.logError(e);
+		return JSON.stringify({
+			ok: false,
+			message: e.message || String(e),
+		});
+	}
+}
+
 const ARRAYBUFFER_MAX_LENGTH = Services.appinfo.is64Bit
 	? Math.pow(2, 33)
 	: Math.pow(2, 32) - 1;
@@ -92,6 +252,31 @@ class ReaderInstance {
 
 	get type() {
 		return this._type;
+	}
+
+	_getBibliographicPaperTitle() {
+		try {
+			const item = this._item;
+			if (!item) {
+				return '';
+			}
+			const parentID = item.parentItemID ?? item.parentID;
+			if (parentID) {
+				const parent = Zotero.Items.get(parentID);
+				if (parent && !parent.isAttachment()) {
+					const t = parent.getField('title');
+					if (t && String(t).trim()) {
+						return String(t).trim();
+					}
+				}
+			}
+			const t = item.getField('title');
+			return t ? String(t).trim() : '';
+		}
+		catch (e) {
+			Zotero.logError(e);
+			return '';
+		}
 	}
 
 	async focus() {
@@ -589,7 +774,176 @@ class ReaderInstance {
 			},
 			onSetDarkTheme: (themeName) => {
 				Zotero.Prefs.set('reader.darkTheme', themeName || false);
-			}
+			},
+			onInsertReference: (vibeCardData) => {
+				try {
+					const win = Zotero.getMainWindow();
+					const contextPaneInner = win.document.getElementById('zotero-context-pane-inner');
+					if (!contextPaneInner) {
+						return false;
+					}
+					let currentItemID = null;
+					try {
+						let reader = Zotero.Reader.getByTabID(win.Zotero_Tabs.selectedID);
+						if (reader) {
+							currentItemID = reader.itemID;
+						}
+					}
+					catch (e) {}
+					let aiChatContainer = null;
+					if (currentItemID && contextPaneInner._aiChatPaneDeck) {
+						aiChatContainer = Array.from(contextPaneInner._aiChatPaneDeck.children).find(x => x.itemID == currentItemID);
+					}
+					if (!aiChatContainer) {
+						aiChatContainer = contextPaneInner._aiChatPaneDeck?.selectedPanel;
+					}
+					if (!aiChatContainer && contextPaneInner._aiChatPaneDeck?.children.length > 0) {
+						aiChatContainer = contextPaneInner._aiChatPaneDeck.children[0];
+					}
+					if (!aiChatContainer) {
+						return false;
+					}
+					let aiChatAPI = aiChatContainer._aiChatAPI;
+					if (!aiChatAPI) {
+						const iframe = aiChatContainer.querySelector('iframe');
+						if (iframe && iframe.contentWindow) {
+							aiChatAPI = iframe.contentWindow.aiChatAPI;
+							if (aiChatAPI) {
+								aiChatContainer._aiChatAPI = aiChatAPI;
+							}
+						}
+					}
+					if (aiChatAPI && typeof aiChatAPI.insertVibeCardReference === 'function') {
+						aiChatAPI.insertVibeCardReference(vibeCardData);
+						return true;
+					}
+					return false;
+				}
+				catch (e) {
+					Zotero.logError(e);
+					return false;
+				}
+			},
+			// 开源版不再调用 GitHub Search API；代码库仅由用户在 Code Pane 手动输入
+			onSearchPaperGitHubRepo: (_paperTitle, callback) => {
+				try {
+					callback(null);
+				}
+				catch (_e) {}
+			},
+			onCallDeepWikiAPI: async (requestBodyJSON) => {
+				return _zoteroOSSCallDeepWikiAPI(requestBodyJSON);
+			},
+			onGetGitHubUrlFromDB: async () => null,
+			onGetPaperTitle: () => {
+				return this._getBibliographicPaperTitle();
+			},
+			paperTitle: this._getBibliographicPaperTitle(),
+			onSetGitHubRepo: (repoInfo, allResults) => {
+				try {
+					const win = Zotero.getMainWindow();
+					const contextPaneInner = win.document.getElementById('zotero-context-pane-inner');
+					if (!contextPaneInner || !repoInfo || typeof repoInfo !== 'object' || (!repoInfo.name && !repoInfo.url)) {
+						return false;
+					}
+					const currentItemID = this._item.id;
+					let aiChatContainer = null;
+					if (currentItemID && contextPaneInner._aiChatPaneDeck) {
+						aiChatContainer = Array.from(contextPaneInner._aiChatPaneDeck.children).find(x => x.itemID == currentItemID);
+					}
+					if (!aiChatContainer) {
+						aiChatContainer = contextPaneInner._aiChatPaneDeck?.selectedPanel;
+					}
+					if (!aiChatContainer && contextPaneInner._aiChatPaneDeck?.children.length > 0) {
+						aiChatContainer = contextPaneInner._aiChatPaneDeck.children[0];
+					}
+					if (aiChatContainer) {
+						let aiChatAPI = aiChatContainer._aiChatAPI;
+						if (!aiChatAPI) {
+							const iframe = aiChatContainer.querySelector('iframe');
+							if (iframe && iframe.contentWindow) {
+								aiChatAPI = iframe.contentWindow.aiChatAPI;
+								if (aiChatAPI) {
+									aiChatContainer._aiChatAPI = aiChatAPI;
+								}
+							}
+						}
+						if (aiChatAPI) {
+							if (typeof aiChatAPI.setDeepWikiAPIProxy === 'function') {
+								aiChatAPI.setDeepWikiAPIProxy((body) => _zoteroOSSCallDeepWikiAPI(body));
+							}
+							if (typeof aiChatAPI.setGitHubRepo === 'function') {
+								aiChatAPI.setGitHubRepo(repoInfo);
+							}
+						}
+					}
+					let codeContainer = null;
+					if (currentItemID && contextPaneInner._codePaneDeck) {
+						codeContainer = Array.from(contextPaneInner._codePaneDeck.children).find(x => x.itemID == currentItemID);
+					}
+					if (!codeContainer) {
+						codeContainer = contextPaneInner._codePaneDeck?.selectedPanel;
+					}
+					if (codeContainer && codeContainer._codeAPI && typeof codeContainer._codeAPI.setGitHubRepo === 'function') {
+						codeContainer._codeAPI.setGitHubRepo(repoInfo);
+					}
+					return true;
+				}
+				catch (e) {
+					Zotero.logError(e);
+					return false;
+				}
+			},
+			onRequestPaperSummary: (callback) => {
+				_zoteroReaderRequestPaperSummary(this).then(
+					(json) => { callback(json); },
+					(err) => {
+						callback(JSON.stringify({
+							ok: false,
+							message: err && err.message ? err.message : String(err),
+						}));
+					}
+				);
+			},
+			onGetPaperSummaryPrefs: () => JSON.stringify({
+				apiURL: Zotero.Prefs.get('reader.paperSummary.apiURL') || '',
+				model: Zotero.Prefs.get('reader.paperSummary.model') || 'gpt-4o-mini',
+				apiKey: Zotero.Prefs.get('reader.paperSummary.apiKey') || '',
+			}),
+			onSetPaperSummaryPrefs: (jsonStr) => {
+				try {
+					let o = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+					if (!o || typeof o !== 'object') {
+						return;
+					}
+					if (o.apiURL !== undefined) {
+						Zotero.Prefs.set('reader.paperSummary.apiURL', String(o.apiURL || ''));
+					}
+					if (o.model !== undefined) {
+						Zotero.Prefs.set('reader.paperSummary.model', String(o.model || 'gpt-4o-mini'));
+					}
+					if (o.apiKey !== undefined) {
+						Zotero.Prefs.set('reader.paperSummary.apiKey', String(o.apiKey || ''));
+					}
+				}
+				catch (e) {
+					Zotero.logError(e);
+				}
+			},
+			onLoadCachedPaperSummary: (callback) => {
+				if (typeof callback !== 'function') {
+					return;
+				}
+				let aid = this._item?.id;
+				if (!aid) {
+					callback('');
+					return;
+				}
+				Zotero.PaperAiDB.getFullSummary(aid).then(
+					(t) => { callback(t || ''); },
+					() => { callback(''); }
+				);
+			},
 		}, this._iframeWindow, { cloneFunctions: true }));
 
 		this._resolveInitPromise();
@@ -2008,7 +2362,8 @@ class Reader {
 	constructor() {
 		this._sidebarWidth = 240;
 		this._sidebarOpen = false;
-		this._contextPaneOpen = false;
+		// 新建阅读标签时默认展开右侧上下文栏（AI Chat 等）
+		this._contextPaneOpen = true;
 		this._bottomPlaceholderHeight = 0;
 		this._readers = [];
 		this._notifierID = Zotero.Notifier.registerObserver(this, ['item', 'setting', 'tab'], 'reader');
@@ -2410,3 +2765,32 @@ class Reader {
 
 Zotero.Reader = new Reader();
 Zotero.addShutdownListener(() => Zotero.Reader.flushAllReaderStates());
+
+Zotero.ReaderBridge = {
+	getContent: async function (_vibeCardId, _itemID) {
+		return null;
+	},
+	getMarkdownContent: async function (itemID) {
+		return Zotero.ReaderBridge.getPlainTextForAIChat(itemID);
+	},
+	getPlainTextForAIChat: async function (itemID, maxChars) {
+		try {
+			const targetReader = Zotero.Reader._readers.find(r => r._item && r._item.id === itemID);
+			if (!targetReader) {
+				return null;
+			}
+			await targetReader._initPromise;
+			const internal = targetReader._internalReader;
+			if (!internal || typeof internal.getPlainTextForAIChat !== 'function') {
+				return null;
+			}
+			return await internal.getPlainTextForAIChat(maxChars);
+		}
+		catch (e) {
+			Zotero.logError(e);
+			return null;
+		}
+	}
+};
+Zotero.VibeCard = Zotero.ReaderBridge;
+

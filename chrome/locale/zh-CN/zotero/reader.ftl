@@ -63,3 +63,17 @@ pdfReader-import-from-epub-no-annotations-other-file =
     
     If this ebook has been annotated with KOReader, try selecting a “metadata.epub.lua” file directly.
 pdfReader-import-from-epub-select-other = 选择其他文件…
+
+reader-show-paper-summary = 全文摘要
+reader-paper-summary-generate = 生成摘要
+reader-paper-summary-regenerate = 重新生成
+reader-paper-summary-loading = 正在生成摘要…
+reader-paper-summary-hint = 使用 PDF 文字层。在上方填写 API 并保存后，点击生成摘要；摘要会缓存在本地。
+reader-paper-summary-api-url = API Base URL
+reader-paper-summary-model = 模型名
+reader-paper-summary-api-key = API Key
+reader-paper-summary-save-prefs = 保存配置
+reader-paper-summary-settings = API 设置
+reader-paper-summary-saved = 配置已保存
+reader-paper-summary-failed = 摘要请求失败。
+reader-paper-summary-no-handler = 当前阅读器不支持摘要。

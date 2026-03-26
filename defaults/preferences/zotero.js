@@ -233,6 +233,10 @@ pref("extensions.zotero.reader.ebookHyphenate", true);
 pref("extensions.zotero.reader.autoDisableTool.note", true);
 pref("extensions.zotero.reader.autoDisableTool.text", true);
 pref("extensions.zotero.reader.autoDisableTool.image", true);
+pref("extensions.zotero.reader.paperSummary.apiURL", "");
+pref("extensions.zotero.reader.paperSummary.model", "gpt-4o-mini");
+pref("extensions.zotero.reader.paperSummary.apiKey", "");
+pref("extensions.zotero.reader.paperSummary.maxChars", 120000);
 
 // Set color scheme to auto by default
 pref("browser.theme.toolbar-theme", 2);

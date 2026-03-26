@@ -395,6 +395,9 @@ pane-info = 信息
 pane-abstract = 摘要
 pane-attachments = 附件
 pane-notes = 笔记
+pane-ai-chat = AI 对话
+pane-code = 代码与 Wiki
+
 pane-libraries-collections = 文库和分类
 pane-tags = 标签
 pane-related = 相关
@@ -464,6 +467,11 @@ sidenav-attachments =
     .tooltiptext = { pane-attachments }
 sidenav-notes =
     .tooltiptext = { pane-notes }
+sidenav-ai-chat =
+    .tooltiptext = { pane-ai-chat }
+sidenav-code =
+    .tooltiptext = { pane-code }
+
 sidenav-attachment-info =
     .tooltiptext = { pane-attachment-info }
 sidenav-attachment-preview =

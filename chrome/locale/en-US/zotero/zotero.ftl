@@ -481,6 +481,9 @@ pane-info = Info
 pane-abstract = Abstract
 pane-attachments = Attachments
 pane-notes = Notes
+pane-ai-chat = AI Chat
+pane-code = Code & Wiki
+
 pane-libraries-collections = Libraries and Collections
 pane-tags = Tags
 pane-related = Related
@@ -556,6 +559,11 @@ sidenav-attachments =
     .tooltiptext = { pane-attachments }
 sidenav-notes =
     .tooltiptext = { pane-notes }
+sidenav-ai-chat =
+    .tooltiptext = { pane-ai-chat }
+sidenav-code =
+    .tooltiptext = { pane-code }
+
 sidenav-attachment-info =
     .tooltiptext = { pane-attachment-info }
 sidenav-attachment-preview =

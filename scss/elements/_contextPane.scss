@@ -2,7 +2,9 @@ context-pane {
     -moz-box-orient: vertical;
 
     #zotero-context-pane-item-deck,
-    #zotero-context-pane-notes-deck {
+    #zotero-context-pane-notes-deck,
+    #zotero-context-pane-ai-chat-deck,
+    #zotero-context-pane-code-deck {
         position: absolute;
         height: 100%;
         width: 100%;

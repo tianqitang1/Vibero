@@ -53,6 +53,28 @@
 
 			<html:div class="divider"/>
 			
+			<html:div class="pin-wrapper highlight-ai-chat-active">
+				<html:div class="btn"
+					data-l10n-id="sidenav-ai-chat"
+					data-pane="context-ai-chat"
+					tabindex="0"
+					role="tab">
+				</html:div>
+			</html:div>
+
+			<html:div class="divider"/>
+			
+			<html:div class="pin-wrapper highlight-code-active">
+				<html:div class="btn"
+					data-l10n-id="sidenav-code"
+					data-pane="context-code"
+					tabindex="0"
+					role="tab">
+				</html:div>
+			</html:div>
+
+			<html:div class="divider"/>
+			
 			<html:div class="pin-wrapper">
 				<toolbarbutton class="btn"
 					tooltiptext="&zotero.toolbar.openURL.label;"
@@ -76,11 +98,15 @@
 		`, ['chrome://zotero/locale/zotero.dtd']);
 
 		_initialized = false;
-		
+	
 		_container = null;
-		
+	
 		_contextNotesPane = null;
-		
+	
+		_contextAIChatPane = null;
+	
+		_contextCodePane = null;
+	
 		_contextMenuTarget = null;
 
 		_draggedWrapper = null;
@@ -114,6 +140,26 @@
 		set contextNotesPane(val) {
 			if (this._contextNotesPane == val) return;
 			this._contextNotesPane = val;
+			this.render();
+		}
+		
+		get contextAIChatPane() {
+			return this._contextAIChatPane;
+		}
+		
+		set contextAIChatPane(val) {
+			if (this._contextAIChatPane == val) return;
+			this._contextAIChatPane = val;
+			this.render();
+		}
+		
+		get contextCodePane() {
+			return this._contextCodePane;
+		}
+		
+		set contextCodePane(val) {
+			if (this._contextCodePane == val) return;
+			this._contextCodePane = val;
 			this.render();
 		}
 		
@@ -157,6 +203,51 @@
 			this.render();
 		}
 
+		get _contextAIChatPaneVisible() {
+			return this._contextAIChatPane
+				&& !this._collapsed
+				&& this._contextAIChatPane.parentElement.selectedPanel == this._contextAIChatPane;
+		}
+
+		set _contextAIChatPaneVisible(val) {
+			if (!this._contextAIChatPane) return;
+			// The context AI chat pane will always be a direct child of the deck we need to update
+			let deck = this._contextAIChatPane.parentElement;
+			if (val) {
+				deck.selectedPanel = this._contextAIChatPane;
+				this._collapsed = false;
+			}
+			else {
+				// But our _container is not a direct child of the deck,
+				// so find the child that contains it
+				deck.selectedPanel = Array.from(deck.children).find(child => child.contains(this._container));
+			}
+			this.render();
+		}
+
+		get _contextCodePaneVisible() {
+			return this._contextCodePane
+				&& !this._collapsed
+				&& this._contextCodePane.parentElement.selectedPanel == this._contextCodePane;
+		}
+
+		set _contextCodePaneVisible(val) {
+			if (!this._contextCodePane) return;
+			// The context code pane will always be a direct child of the deck we need to update
+			let deck = this._contextCodePane.parentElement;
+			if (val) {
+				deck.selectedPanel = this._contextCodePane;
+				this._collapsed = false;
+			}
+			else {
+				// But our _container is not a direct child of the deck,
+				// so find the child that contains it
+				deck.selectedPanel = Array.from(deck.children).find(child => child.contains(this._container));
+			}
+			this.render();
+		}
+
+
 		get _wrappers() {
 			return Array.from(this._buttonContainer.querySelectorAll('.pin-wrapper'));
 		}
@@ -166,7 +257,7 @@
 		}
 
 		isPanePinnable(id) {
-			if (['context-notes', 'context-all-notes', 'context-item-notes'].includes(id)) {
+			if (['context-notes', 'context-all-notes', 'context-item-notes', 'context-ai-chat', 'context-code'].includes(id)) {
 				return false;
 			}
 			// The first button in the group is not pinnable
@@ -320,11 +411,21 @@
 			}
 
 			let contextNotesPaneVisible = this._contextNotesPaneVisible;
+			let contextAIChatPaneVisible = this._contextAIChatPaneVisible;
+			let contextCodePaneVisible = this._contextCodePaneVisible;
 			let pinnedPane = this.pinnedPane;
 			for (let button of this.querySelectorAll('.btn[data-pane]')) {
 				let pane = button.dataset.pane;
 				// TEMP: never disable context notes button
 				if (this._contextNotesPane) {
+					button.removeAttribute('disabled');
+				}
+				// TEMP: never disable context AI chat button
+				if (this._contextAIChatPane) {
+					button.removeAttribute('disabled');
+				}
+				// TEMP: never disable context code button
+				if (this._contextCodePane) {
 					button.removeAttribute('disabled');
 				}
 				
@@ -340,7 +441,31 @@
 					continue;
 				}
 				
-				button.closest("[role='tab']").setAttribute('aria-selected', !contextNotesPaneVisible);
+				if (pane == 'context-ai-chat') {
+					let hidden = !this._contextAIChatPane;
+					let selected = contextAIChatPaneVisible;
+					
+					button.parentElement.hidden = hidden;
+					button.parentElement.previousElementSibling.hidden = hidden; // Divider
+					
+					button.setAttribute('aria-selected', selected);
+					
+					continue;
+				}
+				
+				if (pane == 'context-code') {
+					let hidden = !this._contextCodePane;
+					let selected = contextCodePaneVisible;
+					
+					button.parentElement.hidden = hidden;
+					button.parentElement.previousElementSibling.hidden = hidden; // Divider
+					
+					button.setAttribute('aria-selected', selected);
+					
+					continue;
+				}
+				
+				button.closest("[role='tab']").setAttribute('aria-selected', !contextNotesPaneVisible && !contextAIChatPaneVisible && !contextCodePaneVisible);
 				// No need to set `hidden` here, since it's updated by ItemDetails#_handlePaneStatus
 				// Set .pinned on the container, for pin styling
 				button.parentElement.classList.toggle('pinned', pane == pinnedPane);
@@ -362,7 +487,9 @@
 			
 			this.querySelector('.highlight-notes-active').classList.toggle('highlight', contextNotesPaneVisible);
 			this.querySelector('.highlight-notes-inactive').classList.toggle('highlight',
-				this._contextNotesPane && !contextNotesPaneVisible);
+				this._contextNotesPane && !contextNotesPaneVisible && !contextAIChatPaneVisible && !contextCodePaneVisible);
+			this.querySelector('.highlight-ai-chat-active').classList.toggle('highlight', contextAIChatPaneVisible);
+			this.querySelector('.highlight-code-active').classList.toggle('highlight', contextCodePaneVisible);
 
 			// Update the pane order
 			this.container.initPaneOrder(this.getPersistedOrder());
@@ -741,16 +868,34 @@
 			let pane = button.dataset.pane;
 			if (!pane) return;
 			switch (pane) {
-				case "context-notes":
-					if (event.button !== 0) {
-						return;
-					}
-					if (event.detail == 2) {
-						this.pinnedPane = null;
-					}
-					this._contextNotesPaneVisible = true;
-					break;
-				default: {
+			case "context-notes":
+				if (event.button !== 0) {
+					return;
+				}
+				if (event.detail == 2) {
+					this.pinnedPane = null;
+				}
+				this._contextNotesPaneVisible = true;
+				break;
+		case "context-ai-chat":
+			if (event.button !== 0) {
+				return;
+			}
+			if (event.detail == 2) {
+				this.pinnedPane = null;
+			}
+			this._contextAIChatPaneVisible = true;
+			break;
+		case "context-code":
+			if (event.button !== 0) {
+				return;
+			}
+			if (event.detail == 2) {
+				this.pinnedPane = null;
+			}
+			this._contextCodePaneVisible = true;
+			break;
+		default: {
 					if (event.button !== 0) {
 						return;
 					}
@@ -760,6 +905,14 @@
 						case 1:
 							if (this._contextNotesPane && this._contextNotesPaneVisible) {
 								this._contextNotesPaneVisible = false;
+								scrollType = 'instant';
+							}
+							if (this._contextAIChatPane && this._contextAIChatPaneVisible) {
+								this._contextAIChatPaneVisible = false;
+								scrollType = 'instant';
+							}
+							if (this._contextCodePane && this._contextCodePaneVisible) {
+								this._contextCodePaneVisible = false;
 								scrollType = 'instant';
 							}
 							// Call scrolling before expanding the pane to avoid flickering

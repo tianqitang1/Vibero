@@ -107,6 +107,19 @@ item-pane-sidenav {
 			fill: map.get($item-pane-sections, "notes");
 			stroke: map.get($item-pane-sections, "notes");
 		}
+
+		&[data-pane="context-ai-chat"] {
+			background-image: url("chrome://zotero/skin/itempane/20/ai-chat.png");
+			background-size: 20px 20px;
+			background-position: center;
+		}
+
+		&[data-pane="context-code"] {
+			background-image: url("chrome://zotero/skin/16/github.svg");
+			background-size: 20px 20px;
+			background-position: center;
+			fill: #666;
+		}
 		
 		&[data-action="locate"], &[data-action="toggle-pane"] {
 			color: var(--fill-secondary);
