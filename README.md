@@ -4,7 +4,6 @@
 
 # Vibero
 
-**重新分配你的注意力 —— 读得更快，但也更深入** ✨📚
 
 <p>
   <a href="https://github.com/chenyu-xjtu/Vibero/stargazers"><img src="https://img.shields.io/github/stars/chenyu-xjtu/Vibero?style=for-the-badge&logo=github&color=ffc107&label=Stars" alt="GitHub Stars"/></a>
@@ -23,9 +22,7 @@
 
 ---
 
-## ✨ 这是什么？
-
-Vibero 是一款 **vibe-reading** 阅读增强：帮你把注意力拉回 paper，读得更快，也想得更深。
+## ✨ 重新分配你的注意力 —— 读得更快，但也更深入
 
 ---
 

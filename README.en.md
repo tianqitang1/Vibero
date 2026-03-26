@@ -4,7 +4,6 @@
 
 # Vibero
 
-**Redirect Your Attention - Faster, yet Deeper** ✨📚
 
 
 
@@ -16,10 +15,7 @@
 
 ---
 
-## ✨ What is this?
-
-Vibero is a vibe-reading reader to redirect your attention, helping you read faster, yet deeper.
-
+## ✨ Redirect Your Attention - Faster, yet Deeper ✨📚
 ---
 
 ## 🌐 Website
