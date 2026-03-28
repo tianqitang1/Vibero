@@ -86,3 +86,7 @@ Builds only the **reader** `zotero` webpack target and copies output to `build/r
 For **ai-chat** and other frontends, run `npm run build` in the relevant subfolder, or use **`./app/scripts/build_and_run -r`** for a full build.
 
 The DeepWiki shell is in place; wire up your own **DeepWiki proxy** to use it 🔗
+
+## 🥰 Acknowledgements
+**Built With**
+**[Zotero](https://github.com/zotero/zotero)**
