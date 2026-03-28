@@ -5,3 +5,6 @@ build/
 tmp
 app/win/codesign
 omni_patch/
+patches/
+patch_omni.sh
+omni_patched.ja
